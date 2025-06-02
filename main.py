@@ -8,12 +8,51 @@ import os
 import io
 from pathlib import Path
 import threading
+import time
+
+class ModernStyle:
+    def __init__(self, root):
+        self.root = root
+        self.setup_style()
+    
+    def setup_style(self):
+        style = ttk.Style()
+        
+        # Configure modern colors
+        self.colors = {
+            'primary': '#2196F3',
+            'primary_dark': '#1976D2',
+            'secondary': '#FF5722',
+            'success': '#4CAF50',
+            'warning': '#FF9800',
+            'danger': '#F44336',
+            'background': '#FAFAFA',
+            'surface': '#FFFFFF',
+            'text': '#212121',
+            'text_secondary': '#757575'
+        }
+        
+        # Configure styles
+        style.configure('Title.TLabel', font=('Segoe UI', 16, 'bold'), foreground=self.colors['text'])
+        style.configure('Heading.TLabel', font=('Segoe UI', 12, 'bold'), foreground=self.colors['text'])
+        style.configure('Body.TLabel', font=('Segoe UI', 10), foreground=self.colors['text'])
+        style.configure('Primary.TButton', font=('Segoe UI', 10, 'bold'))
+        style.configure('Success.TButton', font=('Segoe UI', 10, 'bold'))
+        style.configure('Danger.TButton', font=('Segoe UI', 10, 'bold'))
+        
+        # Configure notebook style for modern tabs
+        style.configure('Modern.TNotebook', tabposition='n')
+        style.configure('Modern.TNotebook.Tab', padding=[20, 10])
 
 class PDFProcessor:
     def __init__(self, root):
         self.root = root
-        self.root.title("PDF Processor - Slice, Convert & OCR")
-        self.root.geometry("800x700")
+        self.root.title("PDF Processor Pro - Slice, Convert & OCR")
+        self.root.geometry("900x800")
+        self.root.configure(bg='#FAFAFA')
+        
+        # Initialize modern style
+        self.style = ModernStyle(root)
         
         # Variables
         self.pdf_path = tk.StringVar()
@@ -22,92 +61,280 @@ class PDFProcessor:
         self.start_page = tk.IntVar(value=1)
         self.end_page = tk.IntVar(value=1)
         self.max_size_mb = tk.DoubleVar(value=5.0)
-        self.enable_ocr = tk.BoolVar(value=True)
+        self.enable_ocr = tk.BooleanVar(value=True)
+        self.extract_images = tk.BooleanVar(value=True)
+        
+        # Processing control
+        self.is_processing = False
+        self.stop_processing = False
+        self.current_thread = None
         
         self.setup_ui()
         
     def setup_ui(self):
-        # Main frame
-        main_frame = ttk.Frame(self.root, padding="10")
-        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        # Main container with padding
+        main_container = tk.Frame(self.root, bg='#FAFAFA')
+        main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
         
-        # PDF Selection
-        ttk.Label(main_frame, text="Select PDF File:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        # Title
+        title_label = ttk.Label(main_container, text="PDF Processor Pro", style='Title.TLabel')
+        title_label.pack(pady=(0, 20))
         
-        pdf_frame = ttk.Frame(main_frame)
-        pdf_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
+        # Create notebook for organized tabs
+        self.notebook = ttk.Notebook(main_container, style='Modern.TNotebook')
+        self.notebook.pack(fill=tk.BOTH, expand=True)
         
-        ttk.Entry(pdf_frame, textvariable=self.pdf_path, width=60).grid(row=0, column=0, sticky=(tk.W, tk.E))
-        ttk.Button(pdf_frame, text="Browse", command=self.browse_pdf).grid(row=0, column=1, padx=(5, 0))
+        # Setup tabs
+        self.setup_input_tab()
+        self.setup_operations_tab()
+        self.setup_output_tab()
         
-        pdf_frame.columnconfigure(0, weight=1)
+        # Control buttons frame
+        control_frame = tk.Frame(main_container, bg='#FAFAFA')
+        control_frame.pack(fill=tk.X, pady=(20, 0))
         
-        # Output Directory
-        ttk.Label(main_frame, text="Output Directory:").grid(row=2, column=0, sticky=tk.W, pady=(20, 5))
+        # Process button
+        self.process_btn = tk.Button(
+            control_frame, text="🚀 Start Processing", 
+            command=self.process_pdf,
+            bg='#4CAF50', fg='white', font=('Segoe UI', 11, 'bold'),
+            relief=tk.FLAT, padx=30, pady=10,
+            cursor='hand2'
+        )
+        self.process_btn.pack(side=tk.LEFT, padx=(0, 10))
         
-        output_frame = ttk.Frame(main_frame)
-        output_frame.grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
+        # Stop button
+        self.stop_btn = tk.Button(
+            control_frame, text="⏹️ Stop Process", 
+            command=self.stop_process,
+            bg='#F44336', fg='white', font=('Segoe UI', 11, 'bold'),
+            relief=tk.FLAT, padx=30, pady=10,
+            cursor='hand2', state=tk.DISABLED
+        )
+        self.stop_btn.pack(side=tk.LEFT, padx=(0, 10))
         
-        ttk.Entry(output_frame, textvariable=self.output_dir, width=60).grid(row=0, column=0, sticky=(tk.W, tk.E))
-        ttk.Button(output_frame, text="Browse", command=self.browse_output).grid(row=0, column=1, padx=(5, 0))
+        # Progress frame
+        progress_frame = tk.Frame(main_container, bg='#FAFAFA')
+        progress_frame.pack(fill=tk.X, pady=(20, 0))
         
-        output_frame.columnconfigure(0, weight=1)
+        # Progress bar with modern styling
+        self.progress = ttk.Progressbar(progress_frame, mode='determinate', length=400)
+        self.progress.pack(fill=tk.X, pady=(0, 10))
+        
+        # Status label with modern styling
+        self.status_label = ttk.Label(progress_frame, text="Ready to process", style='Body.TLabel')
+        self.status_label.pack()
+        
+    def setup_input_tab(self):
+        input_frame = ttk.Frame(self.notebook)
+        self.notebook.add(input_frame, text="📁 Input & Output")
+        
+        # Create scrollable frame
+        canvas = tk.Canvas(input_frame, bg='white')
+        scrollbar = ttk.Scrollbar(input_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # PDF Selection Section
+        pdf_section = ttk.LabelFrame(scrollable_frame, text="📄 PDF File Selection", padding=20)
+        pdf_section.pack(fill=tk.X, pady=(0, 20))
+        
+        ttk.Label(pdf_section, text="Select PDF File:", style='Heading.TLabel').pack(anchor=tk.W, pady=(0, 10))
+        
+        pdf_input_frame = tk.Frame(pdf_section, bg='white')
+        pdf_input_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        self.pdf_entry = tk.Entry(
+            pdf_input_frame, textvariable=self.pdf_path, 
+            font=('Segoe UI', 10), relief=tk.FLAT, 
+            bg='#F5F5F5', fg='#212121', insertbackground='#212121'
+        )
+        self.pdf_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=8, padx=(0, 10))
+        
+        browse_pdf_btn = tk.Button(
+            pdf_input_frame, text="📂 Browse", 
+            command=self.browse_pdf,
+            bg='#2196F3', fg='white', font=('Segoe UI', 10, 'bold'),
+            relief=tk.FLAT, padx=20, pady=8, cursor='hand2'
+        )
+        browse_pdf_btn.pack(side=tk.RIGHT)
+        
+        # PDF Info display
+        self.pdf_info_label = ttk.Label(pdf_section, text="No PDF selected", style='Body.TLabel')
+        self.pdf_info_label.pack(anchor=tk.W, pady=(5, 0))
+        
+        # Output Directory Section
+        output_section = ttk.LabelFrame(scrollable_frame, text="💾 Output Directory", padding=20)
+        output_section.pack(fill=tk.X, pady=(0, 20))
+        
+        ttk.Label(output_section, text="Output Directory:", style='Heading.TLabel').pack(anchor=tk.W, pady=(0, 10))
+        
+        output_input_frame = tk.Frame(output_section, bg='white')
+        output_input_frame.pack(fill=tk.X)
+        
+        self.output_entry = tk.Entry(
+            output_input_frame, textvariable=self.output_dir, 
+            font=('Segoe UI', 10), relief=tk.FLAT, 
+            bg='#F5F5F5', fg='#212121', insertbackground='#212121'
+        )
+        self.output_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=8, padx=(0, 10))
+        
+        browse_output_btn = tk.Button(
+            output_input_frame, text="📂 Browse", 
+            command=self.browse_output,
+            bg='#2196F3', fg='white', font=('Segoe UI', 10, 'bold'),
+            relief=tk.FLAT, padx=20, pady=8, cursor='hand2'
+        )
+        browse_output_btn.pack(side=tk.RIGHT)
+        
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+    def setup_operations_tab(self):
+        ops_frame = ttk.Frame(self.notebook)
+        self.notebook.add(ops_frame, text="⚙️ Operations")
+        
+        # Create scrollable frame
+        canvas = tk.Canvas(ops_frame, bg='white')
+        scrollbar = ttk.Scrollbar(ops_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
         
         # Operation Selection
-        ttk.Label(main_frame, text="Operation:").grid(row=4, column=0, sticky=tk.W, pady=(20, 5))
+        operation_section = ttk.LabelFrame(scrollable_frame, text="🔧 Choose Operation", padding=20)
+        operation_section.pack(fill=tk.X, pady=(0, 20))
         
-        operations_frame = ttk.LabelFrame(main_frame, text="Choose Operation", padding="10")
-        operations_frame.grid(row=5, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
+        operations = [
+            ("slice_pages", "📄 Slice by Page Range", "Extract specific pages from PDF"),
+            ("slice_size", "💾 Slice by File Size", "Split PDF into size-limited parts"),
+            ("to_text", "📝 Convert to Text", "Extract all text with OCR support"),
+            ("extract_ocr", "🖼️ Extract Images & OCR", "Extract images and perform OCR")
+        ]
         
-        ttk.Radiobutton(operations_frame, text="Slice by Page Range", 
-                       variable=self.operation, value="slice_pages").grid(row=0, column=0, sticky=tk.W)
-        ttk.Radiobutton(operations_frame, text="Slice by File Size", 
-                       variable=self.operation, value="slice_size").grid(row=1, column=0, sticky=tk.W)
-        ttk.Radiobutton(operations_frame, text="Convert to Text", 
-                       variable=self.operation, value="to_text").grid(row=2, column=0, sticky=tk.W)
-        ttk.Radiobutton(operations_frame, text="Extract Images & OCR", 
-                       variable=self.operation, value="extract_ocr").grid(row=3, column=0, sticky=tk.W)
+        for value, text, desc in operations:
+            frame = tk.Frame(operation_section, bg='white')
+            frame.pack(fill=tk.X, pady=5)
+            
+            radio = tk.Radiobutton(
+                frame, text=text, variable=self.operation, value=value,
+                font=('Segoe UI', 11, 'bold'), bg='white', fg='#212121',
+                selectcolor='#2196F3', activebackground='white'
+            )
+            radio.pack(anchor=tk.W)
+            
+            desc_label = ttk.Label(frame, text=desc, style='Body.TLabel')
+            desc_label.pack(anchor=tk.W, padx=(25, 0))
         
-        # Parameters Frame
-        params_frame = ttk.LabelFrame(main_frame, text="Parameters", padding="10")
-        params_frame.grid(row=6, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10)
+        # Parameters Section
+        params_section = ttk.LabelFrame(scrollable_frame, text="🎛️ Parameters", padding=20)
+        params_section.pack(fill=tk.X, pady=(0, 20))
         
         # Page Range Parameters
-        ttk.Label(params_frame, text="Start Page:").grid(row=0, column=0, sticky=tk.W, padx=(0, 5))
-        ttk.Spinbox(params_frame, from_=1, to=9999, textvariable=self.start_page, width=10).grid(row=0, column=1, sticky=tk.W, padx=(0, 20))
+        page_frame = tk.Frame(params_section, bg='white')
+        page_frame.pack(fill=tk.X, pady=(0, 15))
         
-        ttk.Label(params_frame, text="End Page:").grid(row=0, column=2, sticky=tk.W, padx=(0, 5))
-        ttk.Spinbox(params_frame, from_=1, to=9999, textvariable=self.end_page, width=10).grid(row=0, column=3, sticky=tk.W)
+        ttk.Label(page_frame, text="Page Range:", style='Heading.TLabel').pack(anchor=tk.W, pady=(0, 10))
+        
+        page_inputs_frame = tk.Frame(page_frame, bg='white')
+        page_inputs_frame.pack(fill=tk.X)
+        
+        ttk.Label(page_inputs_frame, text="Start:", style='Body.TLabel').pack(side=tk.LEFT, padx=(0, 5))
+        start_spin = tk.Spinbox(
+            page_inputs_frame, from_=1, to=9999, textvariable=self.start_page, 
+            width=8, font=('Segoe UI', 10), relief=tk.FLAT, bg='#F5F5F5'
+        )
+        start_spin.pack(side=tk.LEFT, padx=(0, 20))
+        
+        ttk.Label(page_inputs_frame, text="End:", style='Body.TLabel').pack(side=tk.LEFT, padx=(0, 5))
+        end_spin = tk.Spinbox(
+            page_inputs_frame, from_=1, to=9999, textvariable=self.end_page, 
+            width=8, font=('Segoe UI', 10), relief=tk.FLAT, bg='#F5F5F5'
+        )
+        end_spin.pack(side=tk.LEFT)
         
         # Size Parameter
-        ttk.Label(params_frame, text="Max Size (MB):").grid(row=1, column=0, sticky=tk.W, padx=(0, 5), pady=(10, 0))
-        ttk.Spinbox(params_frame, from_=0.1, to=100.0, increment=0.5, textvariable=self.max_size_mb, width=10).grid(row=1, column=1, sticky=tk.W, pady=(10, 0))
+        size_frame = tk.Frame(params_section, bg='white')
+        size_frame.pack(fill=tk.X, pady=(0, 15))
         
-        # OCR Option
-        ttk.Checkbutton(params_frame, text="Enable OCR for images", variable=self.enable_ocr).grid(row=2, column=0, columnspan=2, sticky=tk.W, pady=(10, 0))
+        ttk.Label(size_frame, text="Maximum File Size:", style='Heading.TLabel').pack(anchor=tk.W, pady=(0, 10))
         
-        # Process Button
-        ttk.Button(main_frame, text="Process PDF", command=self.process_pdf, 
-                  style="Accent.TButton").grid(row=7, column=0, columnspan=3, pady=20)
+        size_inputs_frame = tk.Frame(size_frame, bg='white')
+        size_inputs_frame.pack(fill=tk.X)
         
-        # Progress Bar
-        self.progress = ttk.Progressbar(main_frame, mode='indeterminate')
-        self.progress.grid(row=8, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
+        size_spin = tk.Spinbox(
+            size_inputs_frame, from_=0.1, to=100.0, increment=0.5, 
+            textvariable=self.max_size_mb, width=10, font=('Segoe UI', 10), 
+            relief=tk.FLAT, bg='#F5F5F5'
+        )
+        size_spin.pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Label(size_inputs_frame, text="MB", style='Body.TLabel').pack(side=tk.LEFT)
         
-        # Status Label
-        self.status_label = ttk.Label(main_frame, text="Ready")
-        self.status_label.grid(row=9, column=0, columnspan=3, pady=5)
+        # Options Section
+        options_section = ttk.LabelFrame(scrollable_frame, text="🔧 Processing Options", padding=20)
+        options_section.pack(fill=tk.X)
         
-        # Output Text Area
-        ttk.Label(main_frame, text="Output Log:").grid(row=10, column=0, sticky=tk.W, pady=(20, 5))
-        self.output_text = scrolledtext.ScrolledText(main_frame, height=10, width=80)
-        self.output_text.grid(row=11, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        ocr_check = tk.Checkbutton(
+            options_section, text="🔍 Enable OCR for text extraction from images", 
+            variable=self.enable_ocr, font=('Segoe UI', 10),
+            bg='white', fg='#212121', selectcolor='#4CAF50', activebackground='white'
+        )
+        ocr_check.pack(anchor=tk.W, pady=(0, 10))
         
-        # Configure grid weights
-        main_frame.columnconfigure(0, weight=1)
-        self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(0, weight=1)
-        main_frame.rowconfigure(11, weight=1)
+        extract_check = tk.Checkbutton(
+            options_section, text="🖼️ Extract and save images separately", 
+            variable=self.extract_images, font=('Segoe UI', 10),
+            bg='white', fg='#212121', selectcolor='#4CAF50', activebackground='white'
+        )
+        extract_check.pack(anchor=tk.W)
+        
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+    def setup_output_tab(self):
+        output_frame = ttk.Frame(self.notebook)
+        self.notebook.add(output_frame, text="📊 Output Log")
+        
+        # Output section
+        log_section = ttk.LabelFrame(output_frame, text="📝 Processing Log", padding=10)
+        log_section.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        
+        # Create text widget with modern styling
+        self.output_text = scrolledtext.ScrolledText(
+            log_section, height=25, width=80,
+            font=('Consolas', 10), bg='#1E1E1E', fg='#FFFFFF',
+            insertbackground='#FFFFFF', selectbackground='#404040',
+            relief=tk.FLAT, padx=10, pady=10
+        )
+        self.output_text.pack(fill=tk.BOTH, expand=True)
+        
+        # Configure text tags for different message types
+        self.output_text.tag_configure('info', foreground='#81C784')
+        self.output_text.tag_configure('warning', foreground='#FFB74D')
+        self.output_text.tag_configure('error', foreground='#E57373')
+        self.output_text.tag_configure('success', foreground='#4CAF50')
+        
+        # Clear log button
+        clear_btn = tk.Button(
+            output_frame, text="🗑️ Clear Log", 
+            command=self.clear_log,
+            bg='#FF5722', fg='white', font=('Segoe UI', 10, 'bold'),
+            relief=tk.FLAT, padx=20, pady=8, cursor='hand2'
+        )
+        clear_btn.pack(pady=(10, 0))
         
     def browse_pdf(self):
         filename = filedialog.askopenfilename(
@@ -130,18 +357,35 @@ class PDFProcessor:
                     reader = PyPDF2.PdfReader(file)
                     total_pages = len(reader.pages)
                     self.end_page.set(total_pages)
-                    self.log(f"PDF loaded: {total_pages} pages")
+                    
+                    file_size = os.path.getsize(self.pdf_path.get()) / (1024 * 1024)  # MB
+                    self.pdf_info_label.config(
+                        text=f"✅ PDF loaded: {total_pages} pages, {file_size:.1f} MB"
+                    )
+                    self.log(f"PDF loaded: {total_pages} pages, {file_size:.1f} MB", 'info')
         except Exception as e:
-            self.log(f"Error reading PDF: {e}")
+            self.pdf_info_label.config(text=f"❌ Error reading PDF")
+            self.log(f"Error reading PDF: {e}", 'error')
     
-    def log(self, message):
-        self.output_text.insert(tk.END, f"{message}\n")
+    def log(self, message, tag='info'):
+        timestamp = time.strftime("%H:%M:%S")
+        self.output_text.insert(tk.END, f"[{timestamp}] {message}\n", tag)
         self.output_text.see(tk.END)
         self.root.update_idletasks()
     
-    def update_status(self, status):
+    def clear_log(self):
+        self.output_text.delete(1.0, tk.END)
+    
+    def update_status(self, status, progress=None):
         self.status_label.config(text=status)
+        if progress is not None:
+            self.progress['value'] = progress
         self.root.update_idletasks()
+    
+    def stop_process(self):
+        self.stop_processing = True
+        self.log("⏹️ Stop signal sent...", 'warning')
+        self.update_status("Stopping process...")
     
     def process_pdf(self):
         if not self.pdf_path.get():
@@ -152,13 +396,20 @@ class PDFProcessor:
             messagebox.showerror("Error", "Output directory does not exist")
             return
         
-        # Run processing in separate thread to prevent UI freezing
-        threading.Thread(target=self._process_pdf_thread, daemon=True).start()
+        # Update UI for processing state
+        self.is_processing = True
+        self.stop_processing = False
+        self.process_btn.config(state=tk.DISABLED)
+        self.stop_btn.config(state=tk.NORMAL)
+        
+        # Run processing in separate thread
+        self.current_thread = threading.Thread(target=self._process_pdf_thread, daemon=True)
+        self.current_thread.start()
     
     def _process_pdf_thread(self):
         try:
-            self.progress.start()
-            self.update_status("Processing...")
+            self.update_status("Initializing...", 0)
+            self.log("🚀 Starting PDF processing...", 'info')
             
             operation = self.operation.get()
             
@@ -170,16 +421,29 @@ class PDFProcessor:
                 self.convert_to_text()
             elif operation == "extract_ocr":
                 self.extract_and_ocr()
-                
-            self.update_status("Complete!")
             
+            if not self.stop_processing:
+                self.update_status("✅ Processing completed!", 100)
+                self.log("✅ Processing completed successfully!", 'success')
+            else:
+                self.update_status("⏹️ Processing stopped", 0)
+                self.log("⏹️ Processing was stopped by user", 'warning')
+                
         except Exception as e:
-            self.log(f"Error: {e}")
-            self.update_status("Error occurred")
+            self.log(f"❌ Error: {e}", 'error')
+            self.update_status("❌ Error occurred", 0)
         finally:
-            self.progress.stop()
+            # Reset UI state
+            self.is_processing = False
+            self.process_btn.config(state=tk.NORMAL)
+            self.stop_btn.config(state=tk.DISABLED)
     
     def slice_by_pages(self):
+        if self.stop_processing:
+            return
+            
+        self.update_status("📄 Slicing PDF by pages...", 25)
+        
         with open(self.pdf_path.get(), 'rb') as file:
             reader = PyPDF2.PdfReader(file)
             
@@ -189,7 +453,10 @@ class PDFProcessor:
             writer = PyPDF2.PdfWriter()
             
             for i in range(start, end):
+                if self.stop_processing:
+                    return
                 writer.add_page(reader.pages[i])
+                self.update_status(f"Processing page {i+1}...", 25 + (i-start)/(end-start)*50)
             
             output_path = os.path.join(
                 self.output_dir.get(),
@@ -199,13 +466,18 @@ class PDFProcessor:
             with open(output_path, 'wb') as output_file:
                 writer.write(output_file)
             
-            self.log(f"Created: {output_path}")
+            self.log(f"✅ Created: {output_path}", 'success')
     
     def slice_by_size(self):
+        if self.stop_processing:
+            return
+            
+        self.update_status("💾 Slicing PDF by size...", 10)
         max_size_bytes = self.max_size_mb.get() * 1024 * 1024
         
         with open(self.pdf_path.get(), 'rb') as file:
             reader = PyPDF2.PdfReader(file)
+            total_pages = len(reader.pages)
             
             current_writer = PyPDF2.PdfWriter()
             current_size = 0
@@ -213,8 +485,13 @@ class PDFProcessor:
             start_page = 1
             
             for i, page in enumerate(reader.pages):
+                if self.stop_processing:
+                    return
+                    
+                self.update_status(f"Processing page {i+1}/{total_pages}...", 10 + (i/total_pages)*80)
+                
                 # Estimate page size (rough approximation)
-                page_size = len(page.extract_text().encode('utf-8')) * 2  # Rough estimate
+                page_size = len(page.extract_text().encode('utf-8')) * 2
                 
                 if current_size + page_size > max_size_bytes and len(current_writer.pages) > 0:
                     # Save current part
@@ -226,7 +503,7 @@ class PDFProcessor:
                     with open(output_path, 'wb') as output_file:
                         current_writer.write(output_file)
                     
-                    self.log(f"Created: {output_path} (pages {start_page}-{i})")
+                    self.log(f"✅ Created: {output_path} (pages {start_page}-{i})", 'success')
                     
                     # Start new part
                     current_writer = PyPDF2.PdfWriter()
@@ -238,7 +515,7 @@ class PDFProcessor:
                 current_size += page_size
             
             # Save final part
-            if len(current_writer.pages) > 0:
+            if len(current_writer.pages) > 0 and not self.stop_processing:
                 output_path = os.path.join(
                     self.output_dir.get(),
                     f"{Path(self.pdf_path.get()).stem}_part_{part_num}.pdf"
@@ -247,126 +524,245 @@ class PDFProcessor:
                 with open(output_path, 'wb') as output_file:
                     current_writer.write(output_file)
                 
-                self.log(f"Created: {output_path} (pages {start_page}-{len(reader.pages)})")
+                self.log(f"✅ Created: {output_path} (pages {start_page}-{total_pages})", 'success')
     
     def convert_to_text(self):
+        if self.stop_processing:
+            return
+            
+        self.update_status("📝 Converting to text...", 10)
         text_content = []
         
-        # Try PyMuPDF first for better text extraction
         try:
             pdf_doc = fitz.open(self.pdf_path.get())
+            total_pages = len(pdf_doc)
             
-            for page_num in range(len(pdf_doc)):
+            for page_num in range(total_pages):
+                if self.stop_processing:
+                    return
+                    
+                self.update_status(f"Processing page {page_num + 1}/{total_pages}...", 10 + (page_num/total_pages)*80)
+                
                 page = pdf_doc[page_num]
                 text = page.get_text()
                 
+                # Extract text from images if enabled and no text found
+                if (not text.strip() or self.enable_ocr.get()) and self.extract_images.get():
+                    self.log(f"🔍 Extracting text from images on page {page_num + 1}...", 'info')
+                    
+                    # Get images from page
+                    image_list = page.get_images()
+                    image_texts = []
+                    
+                    for img_index, img in enumerate(image_list):
+                        if self.stop_processing:
+                            return
+                            
+                        try:
+                            xref = img[0]
+                            pix = fitz.Pixmap(pdf_doc, xref)
+                            
+                            # Convert CMYK to RGB if necessary
+                            if pix.n - pix.alpha == 4:  # CMYK
+                                pix = fitz.Pixmap(fitz.csRGB, pix)
+                            
+                            if pix.n - pix.alpha < 4:  # GRAY or RGB
+                                img_data = pix.tobytes("png")
+                                img = Image.open(io.BytesIO(img_data))
+                                
+                                if self.enable_ocr.get():
+                                    ocr_text = pytesseract.image_to_string(img)
+                                    if ocr_text.strip():
+                                        image_texts.append(f"[Image {img_index + 1} Text]: {ocr_text.strip()}")
+                            
+                            pix = None
+                            
+                        except Exception as e:
+                            self.log(f"⚠️ Error processing image {img_index + 1} on page {page_num + 1}: {e}", 'warning')
+                    
+                    # If no regular text but found image text, use image text
+                    if not text.strip() and image_texts:
+                        text = "\n\n".join(image_texts)
+                    elif text.strip() and image_texts:
+                        text += "\n\n" + "\n\n".join(image_texts)
+                
+                # If still no text and OCR enabled, OCR the entire page
                 if not text.strip() and self.enable_ocr.get():
-                    # If no text found, try OCR on page image
-                    self.log(f"No text on page {page_num + 1}, trying OCR...")
-                    pix = page.get_pixmap()
-                    img_data = pix.tobytes("png")
-                    img = Image.open(io.BytesIO(img_data))
-                    text = pytesseract.image_to_string(img)
+                    try:
+                        pix = page.get_pixmap()
+                        img_data = pix.tobytes("png")
+                        img = Image.open(io.BytesIO(img_data))
+                        text = pytesseract.image_to_string(img)
+                        self.log(f"🔍 OCR completed for entire page {page_num + 1}", 'info')
+                    except Exception as e:
+                        self.log(f"⚠️ OCR failed for page {page_num + 1}: {e}", 'warning')
                 
                 text_content.append(f"--- Page {page_num + 1} ---\n{text}\n")
-                self.log(f"Processed page {page_num + 1}")
+                self.log(f"✅ Processed page {page_num + 1}", 'info')
             
             pdf_doc.close()
             
         except Exception as e:
-            self.log(f"PyMuPDF failed, trying PyPDF2: {e}")
+            self.log(f"⚠️ PyMuPDF failed, trying PyPDF2: {e}", 'warning')
             # Fallback to PyPDF2
             with open(self.pdf_path.get(), 'rb') as file:
                 reader = PyPDF2.PdfReader(file)
+                total_pages = len(reader.pages)
                 
                 for i, page in enumerate(reader.pages):
+                    if self.stop_processing:
+                        return
+                        
+                    self.update_status(f"Processing page {i + 1}/{total_pages}...", 10 + (i/total_pages)*80)
                     text = page.extract_text()
                     text_content.append(f"--- Page {i + 1} ---\n{text}\n")
-                    self.log(f"Processed page {i + 1}")
+                    self.log(f"✅ Processed page {i + 1}", 'info')
         
-        # Save text file
-        output_path = os.path.join(
-            self.output_dir.get(),
-            f"{Path(self.pdf_path.get()).stem}.txt"
-        )
-        
-        with open(output_path, 'w', encoding='utf-8') as text_file:
-            text_file.write('\n'.join(text_content))
-        
-        self.log(f"Text saved to: {output_path}")
+        if not self.stop_processing:
+            # Save text file
+            output_path = os.path.join(
+                self.output_dir.get(),
+                f"{Path(self.pdf_path.get()).stem}.txt"
+            )
+            
+            with open(output_path, 'w', encoding='utf-8') as text_file:
+                text_file.write('\n'.join(text_content))
+            
+            self.log(f"✅ Text saved to: {output_path}", 'success')
     
     def extract_and_ocr(self):
+        if self.stop_processing:
+            return
+            
+        self.update_status("🖼️ Extracting images and performing OCR...", 5)
+        
         pdf_doc = fitz.open(self.pdf_path.get())
+        total_pages = len(pdf_doc)
         
         image_dir = os.path.join(self.output_dir.get(), f"{Path(self.pdf_path.get()).stem}_images")
         os.makedirs(image_dir, exist_ok=True)
         
         all_text = []
+        total_images = 0
         
-        for page_num in range(len(pdf_doc)):
+        # Count total images first for progress tracking
+        for page_num in range(total_pages):
             page = pdf_doc[page_num]
+            image_list = page.get_images()
+            total_images += len(image_list)
+        
+        processed_images = 0
+        
+        for page_num in range(total_pages):
+            if self.stop_processing:
+                break
+                
+            page = pdf_doc[page_num]
+            self.update_status(f"Processing page {page_num + 1}/{total_pages}...", 5 + (page_num/total_pages)*90)
             
             # Get images from page
             image_list = page.get_images()
-            
             page_text = []
             
             if image_list:
-                self.log(f"Found {len(image_list)} images on page {page_num + 1}")
+                self.log(f"🖼️ Found {len(image_list)} images on page {page_num + 1}", 'info')
                 
                 for img_index, img in enumerate(image_list):
-                    xref = img[0]
-                    pix = fitz.Pixmap(pdf_doc, xref)
-                    
-                    if pix.n - pix.alpha < 4:  # GRAY or RGB
-                        img_data = pix.tobytes("png")
-                        img_path = os.path.join(image_dir, f"page_{page_num + 1}_img_{img_index + 1}.png")
+                    if self.stop_processing:
+                        break
                         
-                        with open(img_path, "wb") as img_file:
-                            img_file.write(img_data)
+                    try:
+                        xref = img[0]
+                        pix = fitz.Pixmap(pdf_doc, xref)
                         
-                        if self.enable_ocr.get():
-                            # Perform OCR
-                            img = Image.open(io.BytesIO(img_data))
-                            ocr_text = pytesseract.image_to_string(img)
+                        # Convert CMYK to RGB if necessary
+                        if pix.n - pix.alpha == 4:  # CMYK
+                            pix = fitz.Pixmap(fitz.csRGB, pix)
+                        
+                        # Only process grayscale or RGB images
+                        if pix.n - pix.alpha < 4:  # GRAY or RGB
+                            img_data = pix.tobytes("png")
                             
-                            if ocr_text.strip():
-                                page_text.append(f"Image {img_index + 1} OCR:\n{ocr_text}")
-                                self.log(f"OCR completed for image {img_index + 1} on page {page_num + 1}")
-                        
-                        self.log(f"Saved: {img_path}")
+                            if self.extract_images.get():
+                                img_path = os.path.join(image_dir, f"page_{page_num + 1}_img_{img_index + 1}.png")
+                                
+                                with open(img_path, "wb") as img_file:
+                                    img_file.write(img_data)
+                                
+                                self.log(f"💾 Saved: {img_path}", 'info')
+                            
+                            if self.enable_ocr.get():
+                                # Perform OCR
+                                img = Image.open(io.BytesIO(img_data))
+                                ocr_text = pytesseract.image_to_string(img)
+                                
+                                if ocr_text.strip():
+                                    page_text.append(f"Image {img_index + 1} OCR:\n{ocr_text.strip()}")
+                                    self.log(f"🔍 OCR completed for image {img_index + 1} on page {page_num + 1}", 'info')
+                                else:
+                                    self.log(f"⚠️ No text found in image {img_index + 1} on page {page_num + 1}", 'warning')
+                        else:
+                            self.log(f"⚠️ Skipped unsupported image format on page {page_num + 1}", 'warning')
                     
-                    pix = None
+                    except Exception as e:
+                        self.log(f"❌ Error processing image {img_index + 1} on page {page_num + 1}: {e}", 'error')
+                    
+                    finally:
+                        if 'pix' in locals():
+                            pix = None
+                    
+                    processed_images += 1
+                    if total_images > 0:
+                        img_progress = 5 + (page_num/total_pages)*85 + (processed_images/total_images)*5
+                        self.update_status(f"Processing images... ({processed_images}/{total_images})", img_progress)
+            
             else:
-                # No embedded images, convert entire page to image for OCR
+                # No embedded images, convert entire page to image for OCR if enabled
                 if self.enable_ocr.get():
-                    pix = page.get_pixmap()
-                    img_data = pix.tobytes("png")
-                    img = Image.open(io.BytesIO(img_data))
-                    ocr_text = pytesseract.image_to_string(img)
-                    
-                    if ocr_text.strip():
-                        page_text.append(f"Page OCR:\n{ocr_text}")
-                        self.log(f"OCR completed for page {page_num + 1}")
+                    try:
+                        pix = page.get_pixmap()
+                        img_data = pix.tobytes("png")
+                        
+                        if self.extract_images.get():
+                            img_path = os.path.join(image_dir, f"page_{page_num + 1}_full.png")
+                            with open(img_path, "wb") as img_file:
+                                img_file.write(img_data)
+                            self.log(f"💾 Saved full page image: {img_path}", 'info')
+                        
+                        img = Image.open(io.BytesIO(img_data))
+                        ocr_text = pytesseract.image_to_string(img)
+                        
+                        if ocr_text.strip():
+                            page_text.append(f"Full Page OCR:\n{ocr_text.strip()}")
+                            self.log(f"🔍 OCR completed for full page {page_num + 1}", 'info')
+                        else:
+                            self.log(f"⚠️ No text found on page {page_num + 1}", 'warning')
+                            
+                    except Exception as e:
+                        self.log(f"❌ Error processing full page {page_num + 1}: {e}", 'error')
             
             if page_text:
                 all_text.append(f"--- Page {page_num + 1} ---\n" + "\n\n".join(page_text))
         
         pdf_doc.close()
         
-        # Save OCR results
-        if all_text:
-            ocr_output_path = os.path.join(
-                self.output_dir.get(),
-                f"{Path(self.pdf_path.get()).stem}_ocr.txt"
-            )
+        if not self.stop_processing:
+            # Save OCR results
+            if all_text:
+                ocr_output_path = os.path.join(
+                    self.output_dir.get(),
+                    f"{Path(self.pdf_path.get()).stem}_ocr.txt"
+                )
+                
+                with open(ocr_output_path, 'w', encoding='utf-8') as text_file:
+                    text_file.write('\n\n'.join(all_text))
+                
+                self.log(f"✅ OCR text saved to: {ocr_output_path}", 'success')
             
-            with open(ocr_output_path, 'w', encoding='utf-8') as text_file:
-                text_file.write('\n\n'.join(all_text))
+            if self.extract_images.get():
+                self.log(f"✅ Images extracted to: {image_dir}", 'success')
             
-            self.log(f"OCR text saved to: {ocr_output_path}")
-        
-        self.log(f"Images extracted to: {image_dir}")
+            self.log(f"✅ Processed {processed_images} images from {total_pages} pages", 'success')
 
 if __name__ == "__main__":
     # Check for required dependencies
@@ -384,6 +780,17 @@ if __name__ == "__main__":
         print("- macOS: brew install tesseract")
         print("- Linux: sudo apt-get install tesseract-ocr")
         exit(1)
+    
+    # Test Tesseract installation
+    try:
+        pytesseract.get_tesseract_version()
+    except Exception:
+        print("⚠️ Warning: Tesseract OCR not found or not properly configured.")
+        print("OCR functionality will not work. Please install Tesseract:")
+        print("- Windows: Download from https://github.com/UB-Mannheim/tesseract/wiki")
+        print("- macOS: brew install tesseract")
+        print("- Linux: sudo apt-get install tesseract-ocr")
+        print("\nThe application will still work for non-OCR operations.")
     
     root = tk.Tk()
     app = PDFProcessor(root)
