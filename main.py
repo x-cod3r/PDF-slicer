@@ -34,8 +34,8 @@ class ModernStyle:
         }
         
         # Configure styles
-        style.configure('Title.TLabel', font=('Segoe UI', 16, 'bold'), foreground=self.colors['text'])
-        style.configure('Heading.TLabel', font=('Segoe UI', 12, 'bold'), foreground=self.colors['text'])
+        style.configure('Title.TLabel', font=('Segoe UI', 15, 'bold'), foreground=self.colors['text']) # Reduced font
+        style.configure('Heading.TLabel', font=('Segoe UI', 11, 'bold'), foreground=self.colors['text']) # Reduced font
         style.configure('Body.TLabel', font=('Segoe UI', 10), foreground=self.colors['text'])
         style.configure('Primary.TButton', font=('Segoe UI', 10, 'bold'))
         style.configure('Success.TButton', font=('Segoe UI', 10, 'bold'))
@@ -76,22 +76,40 @@ class PDFProcessor:
     def setup_ui(self):
         # Main container with padding
         main_container = tk.Frame(self.root, bg='#FAFAFA')
-        main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-        
-        # Title
-        title_label = ttk.Label(main_container, text="PDF Processor Pro", style='Title.TLabel')
-        title_label.pack(pady=(0, 10)) # Reduced bottom padding for title
+        main_container.pack(fill=tk.BOTH, expand=True, padx=15, pady=15) # Reduced main padding
 
-        # Control buttons frame - MOVED UP for initial visibility
+        # Create and pack the attribution bar FIRST for top placement
+        bottom_bar_frame = tk.Frame(main_container, bg=self.style.colors['background'])
+        bottom_bar_frame.pack(side=tk.TOP, fill=tk.X, pady=(0,8)) # Adjusted pady for spacing below
+
+        attribution_label = tk.Label(
+            bottom_bar_frame, 
+            text="Made by AboulNasr", 
+            font=('Segoe UI', 8), 
+            fg=self.style.colors['text_secondary'], 
+            cursor="hand2", 
+            bg=self.style.colors['background']
+        )
+        attribution_label.pack(side=tk.RIGHT, padx=10) 
+        
+        def open_attribution_link(event):
+            webbrowser.open_new_tab("https://www.instagram.com/mahmoud.aboulnasr/")
+        attribution_label.bind("<Button-1>", open_attribution_link)
+
+        # Title - now after attribution
+        title_label = ttk.Label(main_container, text="PDF Processor Pro", style='Title.TLabel')
+        title_label.pack(pady=(0, 8)) # Adjusted padding
+
+        # Control buttons frame
         control_frame = tk.Frame(main_container, bg='#FAFAFA')
-        control_frame.pack(fill=tk.X, pady=10) # Added some vertical padding
+        control_frame.pack(fill=tk.X, pady=(8,8)) # Adjusted padding
         
         # Process button
         self.process_btn = tk.Button(
             control_frame, text="🚀 Start Processing", 
             command=self.process_pdf,
-            bg='#4CAF50', fg='white', font=('Segoe UI', 11, 'bold'),
-            relief=tk.FLAT, padx=30, pady=10,
+            bg='#4CAF50', fg='white', font=('Segoe UI', 10, 'bold'), # Reduced font size
+            relief=tk.FLAT, padx=20, pady=6, # Reduced padding
             cursor='hand2'
         )
         self.process_btn.pack(side=tk.LEFT, padx=(0, 10))
@@ -100,8 +118,8 @@ class PDFProcessor:
         self.stop_btn = tk.Button(
             control_frame, text="⏹️ Stop Process", 
             command=self.stop_process,
-            bg='#F44336', fg='white', font=('Segoe UI', 11, 'bold'),
-            relief=tk.FLAT, padx=30, pady=10,
+            bg='#F44336', fg='white', font=('Segoe UI', 10, 'bold'), # Reduced font size
+            relief=tk.FLAT, padx=20, pady=6, # Reduced padding
             cursor='hand2', state=tk.DISABLED
         )
         self.stop_btn.pack(side=tk.LEFT, padx=(0, 10))
@@ -133,37 +151,20 @@ class PDFProcessor:
         
         # Progress frame - Packed after scrollable content and before output log
         progress_frame = tk.Frame(main_container, bg='#FAFAFA')
-        progress_frame.pack(fill=tk.X, pady=(10, 10)) # Adjusted padding
+        progress_frame.pack(fill=tk.X, pady=(8, 8)) # Adjusted padding
         
         # Progress bar with modern styling
         self.progress = ttk.Progressbar(progress_frame, mode='determinate', length=400)
-        self.progress.pack(fill=tk.X, pady=(0, 10))
+        self.progress.pack(fill=tk.X, pady=(0, 5)) # Reduced bottom padding
         
         # Status label with modern styling
         self.status_label = ttk.Label(progress_frame, text="Ready to process", style='Body.TLabel')
         self.status_label.pack()
 
-        # Setup output log section, this will be above the new bottom_bar_frame
+        # Setup output log section
         self.setup_output_log_section(main_container)
-
-        # Create a bottom bar for attribution
-        bottom_bar_frame = tk.Frame(main_container, bg=self.style.colors['background'])
-        bottom_bar_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(5,0))
-
-        # Attribution Label
-        attribution_label = tk.Label(
-            bottom_bar_frame, # Parent is now bottom_bar_frame
-            text="Made by AboulNasr", 
-            font=('Segoe UI', 8), 
-            fg=self.style.colors['text_secondary'], 
-            cursor="hand2", 
-            bg=self.style.colors['background']
-        )
-        attribution_label.pack(side=tk.RIGHT, padx=10) # Pack to the right of the bottom bar
         
-        def open_attribution_link(event):
-            webbrowser.open_new_tab("https://www.instagram.com/mahmoud.aboulnasr/")
-        attribution_label.bind("<Button-1>", open_attribution_link)
+        # NOTE: Attribution Label and its frame (bottom_bar_frame) have been moved to the top of setup_ui.
         
     def setup_input_section(self, parent_frame):
         # This frame will contain the input and output directory sections
@@ -171,14 +172,14 @@ class PDFProcessor:
         input_output_main_frame = ttk.Frame(parent_frame, padding=(0, 0, 0, 5)) # Reduced bottom padding for the whole section
         input_output_main_frame.pack(fill=tk.X, expand=True) 
 
-        input_group = ttk.LabelFrame(input_output_main_frame, text="📁 Input & Output Settings", padding=10) # Reduced LabelFrame padding
+        input_group = ttk.LabelFrame(input_output_main_frame, text="📁 Input & Output Settings", padding=10) 
         input_group.pack(fill=tk.X, expand=True)
 
         # PDF Selection Section
         pdf_section = ttk.Frame(input_group) 
-        pdf_section.pack(fill=tk.X, pady=(0, 10)) # Reduced bottom padding
+        pdf_section.pack(fill=tk.X, pady=(0, 8)) # Adjusted bottom padding
         
-        ttk.Label(pdf_section, text="Select PDF File:", style='Heading.TLabel').pack(anchor=tk.W, pady=(0, 5)) # Reduced bottom padding
+        ttk.Label(pdf_section, text="Select PDF File:", style='Heading.TLabel').pack(anchor=tk.W, pady=(0, 5)) 
         
         pdf_input_frame = tk.Frame(pdf_section, bg='white') 
         pdf_input_frame.pack(fill=tk.X, pady=(0, 5)) # Reduced bottom padding
@@ -193,8 +194,8 @@ class PDFProcessor:
         browse_pdf_btn = tk.Button(
             pdf_input_frame, text="📂 Browse", 
             command=self.browse_pdf,
-            bg='#2196F3', fg='white', font=('Segoe UI', 10, 'bold'),
-            relief=tk.FLAT, padx=20, pady=4, cursor='hand2' # Reduced pady
+            bg='#2196F3', fg='white', font=('Segoe UI', 9), # Reduced font size, removed bold
+            relief=tk.FLAT, padx=10, pady=2, cursor='hand2' # Reduced padding
         )
         browse_pdf_btn.pack(side=tk.RIGHT)
         
@@ -203,9 +204,9 @@ class PDFProcessor:
         
         # Output Directory Section
         output_section_frame = ttk.Frame(input_group) 
-        output_section_frame.pack(fill=tk.X, pady=(5, 10)) # Added top padding, keep bottom padding
+        output_section_frame.pack(fill=tk.X, pady=(8, 8)) # Adjusted padding
         
-        ttk.Label(output_section_frame, text="Output Directory:", style='Heading.TLabel').pack(anchor=tk.W, pady=(0, 5)) # Reduced bottom padding
+        ttk.Label(output_section_frame, text="Output Directory:", style='Heading.TLabel').pack(anchor=tk.W, pady=(0, 5)) 
         
         output_input_frame = tk.Frame(output_section_frame, bg='white') 
         output_input_frame.pack(fill=tk.X)
@@ -220,22 +221,22 @@ class PDFProcessor:
         browse_output_btn = tk.Button(
             output_input_frame, text="📂 Browse", 
             command=self.browse_output,
-            bg='#2196F3', fg='white', font=('Segoe UI', 10, 'bold'),
-            relief=tk.FLAT, padx=20, pady=4, cursor='hand2' # Reduced pady
+            bg='#2196F3', fg='white', font=('Segoe UI', 9), # Reduced font size, removed bold
+            relief=tk.FLAT, padx=10, pady=2, cursor='hand2' # Reduced padding
         )
         browse_output_btn.pack(side=tk.RIGHT)
 
     def setup_operations_section(self, parent_frame):
         # parent_frame is now self.scrollable_content_frame
-        operations_main_frame = ttk.Frame(parent_frame, padding=(0, 0, 0, 10))
-        operations_main_frame.pack(fill=tk.X, expand=True) # Allow horizontal expansion
+        operations_main_frame = ttk.Frame(parent_frame, padding=(0, 0, 0, 5)) # Reduced bottom padding
+        operations_main_frame.pack(fill=tk.X, expand=True) 
 
-        operations_group = ttk.LabelFrame(operations_main_frame, text="⚙️ Operations & Parameters", padding=15)
+        operations_group = ttk.LabelFrame(operations_main_frame, text="⚙️ Operations & Parameters", padding=10) # Reduced padding
         operations_group.pack(fill=tk.X, expand=True)
         
         # Operation Selection
         operation_selection_frame = ttk.Frame(operations_group)
-        operation_selection_frame.pack(fill=tk.X, pady=(0, 15))
+        operation_selection_frame.pack(fill=tk.X, pady=(0, 10)) # Reduced padding
         
         operations = [
             ("slice_pages", "📄 Slice by Page Range", "Extract specific pages from PDF"),
@@ -246,12 +247,12 @@ class PDFProcessor:
         ]
         
         for value, text, desc in operations:
-            frame = tk.Frame(operation_selection_frame, bg='white') # Assuming 'white' matches style
-            frame.pack(fill=tk.X, pady=5)
+            frame = tk.Frame(operation_selection_frame, bg='white') 
+            frame.pack(fill=tk.X, pady=3) # Reduced padding
             
             radio = tk.Radiobutton(
                 frame, text=text, variable=self.operation, value=value,
-                font=('Segoe UI', 11, 'bold'), bg='white', fg=self.style.colors['text'],
+                font=('Segoe UI', 10), bg='white', fg=self.style.colors['text'], # Reduced font, removed bold
                 selectcolor=self.style.colors['primary'], activebackground='white'
             )
             radio.pack(anchor=tk.W)
@@ -260,14 +261,14 @@ class PDFProcessor:
             desc_label.pack(anchor=tk.W, padx=(25, 0))
         
         # Parameters Section
-        params_section_frame = ttk.Frame(operations_group) # Use simple Frame
-        params_section_frame.pack(fill=tk.X, pady=(0, 15))
+        params_section_frame = ttk.Frame(operations_group) 
+        params_section_frame.pack(fill=tk.X, pady=(0, 10)) # Reduced padding
         
         # Page Range Parameters
-        page_frame = tk.Frame(params_section_frame, bg='white') # Assuming 'white'
-        page_frame.pack(fill=tk.X, pady=(0, 15))
+        page_frame = tk.Frame(params_section_frame, bg='white') 
+        page_frame.pack(fill=tk.X, pady=(0, 8)) # Reduced padding
         
-        ttk.Label(page_frame, text="Page Range:", style='Heading.TLabel').pack(anchor=tk.W, pady=(0, 10))
+        ttk.Label(page_frame, text="Page Range:", style='Heading.TLabel').pack(anchor=tk.W, pady=(0, 5)) # Reduced padding
         
         page_inputs_frame = tk.Frame(page_frame, bg='white')
         page_inputs_frame.pack(fill=tk.X)
@@ -289,10 +290,10 @@ class PDFProcessor:
         end_spin.pack(side=tk.LEFT)
         
         # Size Parameter
-        size_frame = tk.Frame(params_section_frame, bg='white')
-        size_frame.pack(fill=tk.X, pady=(0, 15))
+        size_frame = tk.Frame(params_section_frame, bg='white') 
+        size_frame.pack(fill=tk.X, pady=(0, 8)) # Reduced padding
         
-        ttk.Label(size_frame, text="Maximum File Size:", style='Heading.TLabel').pack(anchor=tk.W, pady=(0, 10))
+        ttk.Label(size_frame, text="Maximum File Size:", style='Heading.TLabel').pack(anchor=tk.W, pady=(0, 5)) # Reduced padding
         
         size_inputs_frame = tk.Frame(size_frame, bg='white')
         size_inputs_frame.pack(fill=tk.X)
@@ -307,19 +308,19 @@ class PDFProcessor:
         ttk.Label(size_inputs_frame, text="MB", style='Body.TLabel').pack(side=tk.LEFT)
         
         # Options Section
-        options_section_frame = ttk.Frame(operations_group) # Use simple Frame
-        options_section_frame.pack(fill=tk.X, pady=(0, 10)) # Reduced bottom padding
+        options_section_frame = ttk.Frame(operations_group) 
+        options_section_frame.pack(fill=tk.X, pady=(0, 10)) 
         
         self.ocr_check_widget = tk.Checkbutton(
             options_section_frame, text="🔍 Enable OCR for text extraction from images", 
-            variable=self.enable_ocr, font=('Segoe UI', 10),
+            variable=self.enable_ocr, font=('Segoe UI', 9), # Reduced font
             bg='white', fg=self.style.colors['text'], selectcolor=self.style.colors['success'], activebackground='white'
         )
-        self.ocr_check_widget.pack(anchor=tk.W, pady=(0, 10))
+        self.ocr_check_widget.pack(anchor=tk.W, pady=(0, 5)) # Reduced padding
         
         self.extract_check_widget = tk.Checkbutton(
             options_section_frame, text="🖼️ Extract and save images separately", 
-            variable=self.extract_images, font=('Segoe UI', 10),
+            variable=self.extract_images, font=('Segoe UI', 9), # Reduced font
             bg='white', fg=self.style.colors['text'], selectcolor=self.style.colors['success'], activebackground='white'
         )
         self.extract_check_widget.pack(anchor=tk.W)
@@ -349,7 +350,7 @@ class PDFProcessor:
     def setup_output_log_section(self, parent_frame):
         # This frame will be at the bottom of parent_frame (main_container)
         # It should be packed *after* the canvas/scrollbar for the main content sections
-        output_log_main_frame = ttk.Frame(parent_frame, padding=(0, 10, 0, 0))
+        output_log_main_frame = ttk.Frame(parent_frame, padding=(0, 5, 0, 0)) # Reduced top padding
         # Make this section expand and fill available vertical space at the bottom.
         # It should take a portion of the space, not all of it, allowing content above.
         # The expand=True for this frame should be relative to its parent (main_container).
@@ -359,14 +360,14 @@ class PDFProcessor:
         # For now, let's set expand=True, but its actual expansion will be limited by other expanding widgets.
         output_log_main_frame.pack(fill=tk.BOTH, expand=True)
         
-        log_section = ttk.LabelFrame(output_log_main_frame, text="📊 Output Log", padding=10)
+        log_section = ttk.LabelFrame(output_log_main_frame, text="📊 Output Log", padding=10) 
         # Give the log_section a weight so it expands within output_log_main_frame
-        log_section.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
-        log_section.columnconfigure(0, weight=1) # Ensure content within expands
-        log_section.rowconfigure(0, weight=1)    # Ensure content within expands
+        log_section.pack(fill=tk.BOTH, expand=True, pady=(0, 5)) # Reduced bottom padding
+        log_section.columnconfigure(0, weight=1) 
+        log_section.rowconfigure(0, weight=1)    
         
         self.output_text = scrolledtext.ScrolledText(
-            log_section, height=10, # Min height, will expand
+            log_section, height=6, # Reduced height to give more space to scrollable area above
             font=('Consolas', 10), bg='#1E1E1E', fg='#FFFFFF',
             insertbackground='#FFFFFF', selectbackground='#404040',
             relief=tk.FLAT, padx=10, pady=10
