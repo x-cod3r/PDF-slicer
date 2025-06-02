@@ -10,6 +10,12 @@ from pathlib import Path
 import threading
 import time
 import webbrowser
+import importlib
+import subprocess
+import sys
+# tkinter needs to be imported early for the dependency check dialogs
+import tkinter as tk
+from tkinter import messagebox, scrolledtext, filedialog # Ensure all needed tkinter components are here
 
 class ModernStyle:
     def __init__(self, root):
@@ -944,34 +950,89 @@ class PDFProcessor:
             
             self.log(f"✅ Processed {processed_images} images from {total_pages} pages", 'success')
 
+def check_and_install_dependencies():
+    required_packages = {
+        'PyPDF2': 'PyPDF2',
+        'fitz': 'PyMuPDF',  # PyMuPDF is imported as fitz
+        'PIL': 'Pillow',    # Pillow is imported as PIL
+        'pytesseract': 'pytesseract'
+    }
+    missing_packages = []
+    for import_name, install_name in required_packages.items():
+        try:
+            importlib.import_module(import_name)
+        except ImportError:
+            missing_packages.append(install_name)
+
+    if missing_packages:
+        root_check = tk.Tk()
+        root_check.withdraw()  # Hide the main window
+
+        msg = (f"The following required Python packages are missing: "
+               f"{', '.join(missing_packages)}.\n\n"
+               f"Do you want to attempt to install them now?\n"
+               f"(Requires internet connection and pip)")
+        
+        if messagebox.askyesno("Missing Dependencies", msg, parent=root_check):
+            installation_summary = []
+            for package_name in missing_packages:
+                try:
+                    cmd = [sys.executable, "-m", "pip", "install", package_name]
+                    # Using DEVNULL for stdout and stderr to keep the console clean for this version
+                    # For more detailed error reporting, capture_output=True would be used.
+                    result = subprocess.run(cmd, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                    if result.returncode == 0:
+                        installation_summary.append(f"Successfully installed {package_name}.")
+                        # messagebox.showinfo("Installation Success", f"Successfully installed {package_name}.", parent=root_check)
+                    else:
+                        error_message = result.stderr.decode('utf-8', errors='ignore').strip()
+                        if not error_message:
+                            error_message = f"Pip returned error code {result.returncode}."
+                        installation_summary.append(f"Failed to install {package_name}.\nError: {error_message[:200]}...") # Show first 200 chars of error
+                        # messagebox.showerror("Installation Failed", f"Failed to install {package_name}.\n{error_message[:200]}...", parent=root_check)
+                except Exception as e:
+                    installation_summary.append(f"An error occurred while trying to install {package_name}: {e}")
+                    # messagebox.showerror("Installation Error", f"An error occurred while trying to install {package_name}: {e}", parent=root_check)
+            
+            summary_msg = "\n".join(installation_summary)
+            summary_msg += "\n\nPlease restart the application for changes to take effect."
+            messagebox.showinfo("Installation Process Finished", summary_msg, parent=root_check)
+            root_check.destroy()
+            sys.exit()
+        else:
+            messagebox.showerror("Missing Dependencies",
+                                 f"The application cannot run without the following packages: "
+                                 f"{', '.join(missing_packages)}.\n\nPlease install them manually and restart.",
+                                 parent=root_check)
+            root_check.destroy()
+            sys.exit()
+    # If a temporary root was created only for this function, ensure it's destroyed.
+    # However, if all checks pass, we proceed to use the main root.
+
 if __name__ == "__main__":
-    # Check for required dependencies
-    try:
-        import PyPDF2
-        import fitz
-        import pytesseract
-        from PIL import Image
-    except ImportError as e:
-        print(f"Missing dependency: {e}")
-        print("\nPlease install required packages:")
-        print("pip install PyPDF2 PyMuPDF pillow pytesseract")
-        print("\nFor OCR functionality, you also need to install Tesseract:")
-        print("- Windows: Download from https://github.com/UB-Mannheim/tesseract/wiki")
-        print("- macOS: brew install tesseract")
-        print("- Linux: sudo apt-get install tesseract-ocr")
-        exit(1)
+    # Call dependency check before creating the main application window
+    check_and_install_dependencies()
+
+    # The main application root window is created here
+    root = tk.Tk()
     
-    # Test Tesseract installation
+    # The original Tesseract check (can remain here or be part of PDFProcessor)
+    # For GUI feedback, it's better within PDFProcessor or after root is fully set up.
+    # The Tesseract check is now done after the main root is created.
     try:
         pytesseract.get_tesseract_version()
-    except Exception:
-        print("⚠️ Warning: Tesseract OCR not found or not properly configured.")
-        print("OCR functionality will not work. Please install Tesseract:")
-        print("- Windows: Download from https://github.com/UB-Mannheim/tesseract/wiki")
-        print("- macOS: brew install tesseract")
-        print("- Linux: sudo apt-get install tesseract-ocr")
-        print("\nThe application will still work for non-OCR operations.")
-    
-    root = tk.Tk()
+    except Exception: # More specific: pytesseract.TesseractNotFoundError or similar
+        warning_title = "Tesseract OCR Not Found"
+        warning_message = (
+            "Tesseract OCR is not found on your system or not added to the PATH.\n"
+            "OCR-dependent features (like 'Convert to Text (Advanced, OCR)' "
+            "and image-to-text extraction) will not work.\n\n"
+            "Please install Tesseract OCR and ensure it's in your system's PATH.\n"
+            "You can find installation instructions at: https://github.com/UB-Mannheim/tesseract/wiki\n\n"
+            "The application will continue to run, but with limited functionality."
+        )
+        # 'root' is available here from the main application setup
+        messagebox.showwarning(warning_title, warning_message, parent=root)
+
     app = PDFProcessor(root)
     root.mainloop()
