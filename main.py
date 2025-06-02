@@ -49,7 +49,8 @@ class PDFProcessor:
     def __init__(self, root):
         self.root = root
         self.root.title("PDF Processor Pro - Slice, Convert & OCR")
-        self.root.geometry("700x600")
+        self.root.geometry("600x780") # Adjusted size
+        self.root.resizable(True, True) # Make window resizable
         self.root.configure(bg='#FAFAFA')
         
         # Initialize modern style
@@ -81,16 +82,31 @@ class PDFProcessor:
         title_label = ttk.Label(main_container, text="PDF Processor Pro", style='Title.TLabel')
         title_label.pack(pady=(0, 20))
         
-        # Create notebook for organized tabs
-        self.notebook = ttk.Notebook(main_container, style='Modern.TNotebook')
-        self.notebook.pack(fill=tk.BOTH, expand=True)
+        # Create a scrollable frame for the main content (input and operations)
+        canvas = tk.Canvas(main_container, bg='#FAFAFA', highlightthickness=0)
+        scrollbar = ttk.Scrollbar(main_container, orient="vertical", command=canvas.yview)
         
-        # Setup tabs
-        self.setup_input_tab()
-        self.setup_operations_tab()
-        self.setup_output_tab()
+        # This is the actual frame that will contain input and operations sections and will be scrolled
+        self.scrollable_content_frame = tk.Frame(canvas, bg='#FAFAFA')
         
-        # Control buttons frame
+        self.scrollable_content_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=self.scrollable_content_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Pack canvas and scrollbar. Canvas takes most space, scrollbar to its right.
+        # single_content_frame is now self.scrollable_content_frame
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Setup input and operations sections within the scrollable_content_frame
+        self.setup_input_section(self.scrollable_content_frame)
+        self.setup_operations_section(self.scrollable_content_frame)
+        
+        # Control buttons frame - remains in main_container, below the scrollable content area
         control_frame = tk.Frame(main_container, bg='#FAFAFA')
         control_frame.pack(fill=tk.X, pady=(20, 0))
         
@@ -126,45 +142,44 @@ class PDFProcessor:
         self.status_label = ttk.Label(progress_frame, text="Ready to process", style='Body.TLabel')
         self.status_label.pack()
 
+        # Setup output log section, this will be above the new bottom_bar_frame
+        self.setup_output_log_section(main_container)
+
+        # Create a bottom bar for attribution
+        bottom_bar_frame = tk.Frame(main_container, bg=self.style.colors['background'])
+        bottom_bar_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(5,0))
+
         # Attribution Label
         attribution_label = tk.Label(
-            main_container, 
+            bottom_bar_frame, # Parent is now bottom_bar_frame
             text="Made by AboulNasr", 
             font=('Segoe UI', 8), 
             fg=self.style.colors['text_secondary'], 
             cursor="hand2", 
-            bg=self.style.colors['background']  # Match main_container background
+            bg=self.style.colors['background']
         )
-        attribution_label.pack(side=tk.RIGHT, padx=5, pady=(5,0))
+        attribution_label.pack(side=tk.RIGHT, padx=10) # Pack to the right of the bottom bar
         
         def open_attribution_link(event):
             webbrowser.open_new_tab("https://www.instagram.com/mahmoud.aboulnasr/")
         attribution_label.bind("<Button-1>", open_attribution_link)
         
-    def setup_input_tab(self):
-        input_frame = ttk.Frame(self.notebook)
-        self.notebook.add(input_frame, text="📁 Input & Output")
-        
-        # Create scrollable frame
-        canvas = tk.Canvas(input_frame, bg='white')
-        scrollbar = ttk.Scrollbar(input_frame, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
-        
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-        
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
+    def setup_input_section(self, parent_frame):
+        # This frame will contain the input and output directory sections
+        # parent_frame is now self.scrollable_content_frame
+        input_output_main_frame = ttk.Frame(parent_frame, padding=(0, 0, 0, 10)) 
+        input_output_main_frame.pack(fill=tk.X, expand=True) # Allow horizontal expansion
+
+        input_group = ttk.LabelFrame(input_output_main_frame, text="📁 Input & Output Settings", padding=15)
+        input_group.pack(fill=tk.X, expand=True)
+
         # PDF Selection Section
-        pdf_section = ttk.LabelFrame(scrollable_frame, text="📄 PDF File Selection", padding=20)
-        pdf_section.pack(fill=tk.X, pady=(0, 20))
+        pdf_section = ttk.Frame(input_group)
+        pdf_section.pack(fill=tk.X, pady=(0, 15))
         
         ttk.Label(pdf_section, text="Select PDF File:", style='Heading.TLabel').pack(anchor=tk.W, pady=(0, 10))
         
-        pdf_input_frame = tk.Frame(pdf_section, bg='white')
+        pdf_input_frame = tk.Frame(pdf_section, bg='white') # Assuming 'white' matches style, or remove bg
         pdf_input_frame.pack(fill=tk.X, pady=(0, 10))
         
         self.pdf_entry = tk.Entry(
@@ -182,17 +197,16 @@ class PDFProcessor:
         )
         browse_pdf_btn.pack(side=tk.RIGHT)
         
-        # PDF Info display
         self.pdf_info_label = ttk.Label(pdf_section, text="No PDF selected", style='Body.TLabel', justify=tk.LEFT)
         self.pdf_info_label.pack(anchor=tk.W, pady=(5, 0), fill=tk.X, expand=True)
         
         # Output Directory Section
-        output_section = ttk.LabelFrame(scrollable_frame, text="💾 Output Directory", padding=20)
-        output_section.pack(fill=tk.X, pady=(0, 20))
+        output_section_frame = ttk.Frame(input_group) # Use simple Frame
+        output_section_frame.pack(fill=tk.X, pady=(0, 10)) # Reduced bottom padding
         
-        ttk.Label(output_section, text="Output Directory:", style='Heading.TLabel').pack(anchor=tk.W, pady=(0, 10))
+        ttk.Label(output_section_frame, text="Output Directory:", style='Heading.TLabel').pack(anchor=tk.W, pady=(0, 10))
         
-        output_input_frame = tk.Frame(output_section, bg='white')
+        output_input_frame = tk.Frame(output_section_frame, bg='white') # Assuming 'white' matches style
         output_input_frame.pack(fill=tk.X)
         
         self.output_entry = tk.Entry(
@@ -209,30 +223,18 @@ class PDFProcessor:
             relief=tk.FLAT, padx=20, pady=8, cursor='hand2'
         )
         browse_output_btn.pack(side=tk.RIGHT)
-        
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-        
-    def setup_operations_tab(self):
-        ops_frame = ttk.Frame(self.notebook)
-        self.notebook.add(ops_frame, text="⚙️ Operations")
-        
-        # Create scrollable frame
-        canvas = tk.Canvas(ops_frame, bg='white')
-        scrollbar = ttk.Scrollbar(ops_frame, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
-        
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-        
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
+
+    def setup_operations_section(self, parent_frame):
+        # parent_frame is now self.scrollable_content_frame
+        operations_main_frame = ttk.Frame(parent_frame, padding=(0, 0, 0, 10))
+        operations_main_frame.pack(fill=tk.X, expand=True) # Allow horizontal expansion
+
+        operations_group = ttk.LabelFrame(operations_main_frame, text="⚙️ Operations & Parameters", padding=15)
+        operations_group.pack(fill=tk.X, expand=True)
         
         # Operation Selection
-        operation_section = ttk.LabelFrame(scrollable_frame, text="🔧 Choose Operation", padding=20)
-        operation_section.pack(fill=tk.X, pady=(0, 20))
+        operation_selection_frame = ttk.Frame(operations_group)
+        operation_selection_frame.pack(fill=tk.X, pady=(0, 15))
         
         operations = [
             ("slice_pages", "📄 Slice by Page Range", "Extract specific pages from PDF"),
@@ -243,7 +245,7 @@ class PDFProcessor:
         ]
         
         for value, text, desc in operations:
-            frame = tk.Frame(operation_section, bg='white')
+            frame = tk.Frame(operation_selection_frame, bg='white') # Assuming 'white' matches style
             frame.pack(fill=tk.X, pady=5)
             
             radio = tk.Radiobutton(
@@ -253,15 +255,15 @@ class PDFProcessor:
             )
             radio.pack(anchor=tk.W)
             
-            desc_label = ttk.Label(frame, text=desc, style='Body.TLabel')
+            desc_label = ttk.Label(frame, text=desc, style='Body.TLabel') # bg='white' might be needed if parent isn't white
             desc_label.pack(anchor=tk.W, padx=(25, 0))
         
         # Parameters Section
-        params_section = ttk.LabelFrame(scrollable_frame, text="🎛️ Parameters", padding=20)
-        params_section.pack(fill=tk.X, pady=(0, 20))
+        params_section_frame = ttk.Frame(operations_group) # Use simple Frame
+        params_section_frame.pack(fill=tk.X, pady=(0, 15))
         
         # Page Range Parameters
-        page_frame = tk.Frame(params_section, bg='white')
+        page_frame = tk.Frame(params_section_frame, bg='white') # Assuming 'white'
         page_frame.pack(fill=tk.X, pady=(0, 15))
         
         ttk.Label(page_frame, text="Page Range:", style='Heading.TLabel').pack(anchor=tk.W, pady=(0, 10))
@@ -286,7 +288,7 @@ class PDFProcessor:
         end_spin.pack(side=tk.LEFT)
         
         # Size Parameter
-        size_frame = tk.Frame(params_section, bg='white')
+        size_frame = tk.Frame(params_section_frame, bg='white')
         size_frame.pack(fill=tk.X, pady=(0, 15))
         
         ttk.Label(size_frame, text="Maximum File Size:", style='Heading.TLabel').pack(anchor=tk.W, pady=(0, 10))
@@ -304,94 +306,87 @@ class PDFProcessor:
         ttk.Label(size_inputs_frame, text="MB", style='Body.TLabel').pack(side=tk.LEFT)
         
         # Options Section
-        options_section = ttk.LabelFrame(scrollable_frame, text="🔧 Processing Options", padding=20)
-        options_section.pack(fill=tk.X, pady=(0, 20)) # Added pady for consistency
+        options_section_frame = ttk.Frame(operations_group) # Use simple Frame
+        options_section_frame.pack(fill=tk.X, pady=(0, 10)) # Reduced bottom padding
         
         self.ocr_check_widget = tk.Checkbutton(
-            options_section, text="🔍 Enable OCR for text extraction from images", 
+            options_section_frame, text="🔍 Enable OCR for text extraction from images", 
             variable=self.enable_ocr, font=('Segoe UI', 10),
             bg='white', fg=self.style.colors['text'], selectcolor=self.style.colors['success'], activebackground='white'
         )
         self.ocr_check_widget.pack(anchor=tk.W, pady=(0, 10))
         
         self.extract_check_widget = tk.Checkbutton(
-            options_section, text="🖼️ Extract and save images separately", 
+            options_section_frame, text="🖼️ Extract and save images separately", 
             variable=self.extract_images, font=('Segoe UI', 10),
             bg='white', fg=self.style.colors['text'], selectcolor=self.style.colors['success'], activebackground='white'
         )
         self.extract_check_widget.pack(anchor=tk.W)
 
-        # Add trace for operation changes
         self.operation.trace_add("write", self.update_options_sensitivity)
-        # Initial call to set sensitivity
         self.update_options_sensitivity()
-        
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
 
     def update_options_sensitivity(self, *args):
         current_op = self.operation.get()
         
-        # Determine states for OCR and Extract Images checkboxes
-        # Relevant for 'to_text' (advanced) and 'extract_ocr'
-        # Not relevant for 'simple_text_extraction', 'slice_pages', 'slice_size'
-        
         if current_op == "simple_text_extraction":
             self.ocr_check_widget.config(state=tk.DISABLED)
             self.extract_check_widget.config(state=tk.DISABLED)
-            # Optionally, uncheck them if disabled
-            # self.enable_ocr.set(False)
-            # self.extract_images.set(False)
         elif current_op in ["slice_pages", "slice_size"]:
-            # OCR and Image Extraction are generally not primary for slicing,
-            # but let's assume they might be used by some internal logic if ever extended.
-            # For now, disable if not directly used or clarify requirements.
-            # Based on current implementation, they are not used for slicing.
             self.ocr_check_widget.config(state=tk.DISABLED)
             self.extract_check_widget.config(state=tk.DISABLED)
-        elif current_op == "to_text": # This is "Convert to Text (Advanced, OCR)"
+        elif current_op == "to_text": 
             self.ocr_check_widget.config(state=tk.NORMAL)
-            # Extract images might or might not be relevant depending on if it's used for OCR source
-            # The current `convert_to_text` uses `self.extract_images.get()` for image-based OCR
             self.extract_check_widget.config(state=tk.NORMAL) 
         elif current_op == "extract_ocr":
             self.ocr_check_widget.config(state=tk.NORMAL)
             self.extract_check_widget.config(state=tk.NORMAL)
-        else: # Default or unknown case
+        else: 
             self.ocr_check_widget.config(state=tk.NORMAL)
             self.extract_check_widget.config(state=tk.NORMAL)
 
-    def setup_output_tab(self):
-        output_frame = ttk.Frame(self.notebook)
-        self.notebook.add(output_frame, text="📊 Output Log")
+    def setup_output_log_section(self, parent_frame):
+        # This frame will be at the bottom of parent_frame (main_container)
+        # It should be packed *after* the canvas/scrollbar for the main content sections
+        output_log_main_frame = ttk.Frame(parent_frame, padding=(0, 10, 0, 0))
+        # Make this section expand and fill available vertical space at the bottom.
+        # It should take a portion of the space, not all of it, allowing content above.
+        # The expand=True for this frame should be relative to its parent (main_container).
+        # The canvas for scrollable_content_frame is already packed with expand=True.
+        # We need to ensure this log section doesn't push the canvas up too much.
+        # Let's pack it with a smaller expand weight or ensure its parent has defined proportions.
+        # For now, let's set expand=True, but its actual expansion will be limited by other expanding widgets.
+        output_log_main_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Output section
-        log_section = ttk.LabelFrame(output_frame, text="📝 Processing Log", padding=10)
+        log_section = ttk.LabelFrame(output_log_main_frame, text="📊 Output Log", padding=10)
+        # Give the log_section a weight so it expands within output_log_main_frame
         log_section.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        log_section.columnconfigure(0, weight=1) # Ensure content within expands
+        log_section.rowconfigure(0, weight=1)    # Ensure content within expands
         
-        # Create text widget with modern styling
         self.output_text = scrolledtext.ScrolledText(
-            log_section, height=25, width=80,
+            log_section, height=10, # Min height, will expand
             font=('Consolas', 10), bg='#1E1E1E', fg='#FFFFFF',
             insertbackground='#FFFFFF', selectbackground='#404040',
             relief=tk.FLAT, padx=10, pady=10
         )
-        self.output_text.pack(fill=tk.BOTH, expand=True)
+        self.output_text.pack(fill=tk.BOTH, expand=True) # Make ScrolledText expand
         
-        # Configure text tags for different message types
         self.output_text.tag_configure('info', foreground='#81C784')
         self.output_text.tag_configure('warning', foreground='#FFB74D')
         self.output_text.tag_configure('error', foreground='#E57373')
         self.output_text.tag_configure('success', foreground='#4CAF50')
         
-        # Clear log button
+        clear_btn_frame = tk.Frame(output_log_main_frame, bg=self.style.colors['background'])
+        clear_btn_frame.pack(fill=tk.X, pady=(5,0), side=tk.BOTTOM) # Pack to bottom of log section
+
         clear_btn = tk.Button(
-            output_frame, text="🗑️ Clear Log", 
+            clear_btn_frame, text="🗑️ Clear Log", 
             command=self.clear_log,
             bg='#FF5722', fg='white', font=('Segoe UI', 10, 'bold'),
             relief=tk.FLAT, padx=20, pady=8, cursor='hand2'
         )
-        clear_btn.pack(pady=(10, 0))
+        clear_btn.pack()
         
     def browse_pdf(self):
         filename = filedialog.askopenfilename(
