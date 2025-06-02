@@ -167,8 +167,8 @@ class PDFProcessor:
         browse_pdf_btn.pack(side=tk.RIGHT)
         
         # PDF Info display
-        self.pdf_info_label = ttk.Label(pdf_section, text="No PDF selected", style='Body.TLabel')
-        self.pdf_info_label.pack(anchor=tk.W, pady=(5, 0))
+        self.pdf_info_label = ttk.Label(pdf_section, text="No PDF selected", style='Body.TLabel', justify=tk.LEFT)
+        self.pdf_info_label.pack(anchor=tk.W, pady=(5, 0), fill=tk.X, expand=True)
         
         # Output Directory Section
         output_section = ttk.LabelFrame(scrollable_frame, text="💾 Output Directory", padding=20)
@@ -231,8 +231,8 @@ class PDFProcessor:
             
             radio = tk.Radiobutton(
                 frame, text=text, variable=self.operation, value=value,
-                font=('Segoe UI', 11, 'bold'), bg='white', fg='#212121',
-                selectcolor='#2196F3', activebackground='white'
+                font=('Segoe UI', 11, 'bold'), bg='white', fg=self.style.colors['text'],
+                selectcolor=self.style.colors['primary'], activebackground='white'
             )
             radio.pack(anchor=tk.W)
             
@@ -255,14 +255,16 @@ class PDFProcessor:
         ttk.Label(page_inputs_frame, text="Start:", style='Body.TLabel').pack(side=tk.LEFT, padx=(0, 5))
         start_spin = tk.Spinbox(
             page_inputs_frame, from_=1, to=9999, textvariable=self.start_page, 
-            width=8, font=('Segoe UI', 10), relief=tk.FLAT, bg='#F5F5F5'
+            width=8, font=('Segoe UI', 10), relief=tk.FLAT, bg='#F5F5F5',
+            fg=self.style.colors['text'], insertbackground=self.style.colors['text']
         )
         start_spin.pack(side=tk.LEFT, padx=(0, 20))
         
         ttk.Label(page_inputs_frame, text="End:", style='Body.TLabel').pack(side=tk.LEFT, padx=(0, 5))
         end_spin = tk.Spinbox(
             page_inputs_frame, from_=1, to=9999, textvariable=self.end_page, 
-            width=8, font=('Segoe UI', 10), relief=tk.FLAT, bg='#F5F5F5'
+            width=8, font=('Segoe UI', 10), relief=tk.FLAT, bg='#F5F5F5',
+            fg=self.style.colors['text'], insertbackground=self.style.colors['text']
         )
         end_spin.pack(side=tk.LEFT)
         
@@ -278,26 +280,27 @@ class PDFProcessor:
         size_spin = tk.Spinbox(
             size_inputs_frame, from_=0.1, to=100.0, increment=0.5, 
             textvariable=self.max_size_mb, width=10, font=('Segoe UI', 10), 
-            relief=tk.FLAT, bg='#F5F5F5'
+            relief=tk.FLAT, bg='#F5F5F5',
+            fg=self.style.colors['text'], insertbackground=self.style.colors['text']
         )
         size_spin.pack(side=tk.LEFT, padx=(0, 10))
         ttk.Label(size_inputs_frame, text="MB", style='Body.TLabel').pack(side=tk.LEFT)
         
         # Options Section
         options_section = ttk.LabelFrame(scrollable_frame, text="🔧 Processing Options", padding=20)
-        options_section.pack(fill=tk.X)
+        options_section.pack(fill=tk.X, pady=(0, 20)) # Added pady for consistency
         
         ocr_check = tk.Checkbutton(
             options_section, text="🔍 Enable OCR for text extraction from images", 
             variable=self.enable_ocr, font=('Segoe UI', 10),
-            bg='white', fg='#212121', selectcolor='#4CAF50', activebackground='white'
+            bg='white', fg=self.style.colors['text'], selectcolor=self.style.colors['success'], activebackground='white'
         )
         ocr_check.pack(anchor=tk.W, pady=(0, 10))
         
         extract_check = tk.Checkbutton(
             options_section, text="🖼️ Extract and save images separately", 
             variable=self.extract_images, font=('Segoe UI', 10),
-            bg='white', fg='#212121', selectcolor='#4CAF50', activebackground='white'
+            bg='white', fg=self.style.colors['text'], selectcolor=self.style.colors['success'], activebackground='white'
         )
         extract_check.pack(anchor=tk.W)
         
@@ -561,12 +564,40 @@ class PDFProcessor:
                         try:
                             xref = img[0]
                             pix = fitz.Pixmap(pdf_doc, xref)
+                            old_pix = None # Initialize old_pix
                             
                             # Convert CMYK to RGB if necessary
                             if pix.n - pix.alpha == 4:  # CMYK
-                                pix = fitz.Pixmap(fitz.csRGB, pix)
+                                self.log(f"Image is CMYK on page {page_num + 1}, img_index {img_index} (in convert_to_text). Attempting to convert to RGB...", 'info')
+                                try:
+                                    old_pix = pix # Keep a reference
+                                    pix = fitz.Pixmap(fitz.csRGB, old_pix)
+                                    old_pix = None # Dereference old_pix
+                                    self.log(f"Successfully converted CMYK image to RGB. New colorspace: {pix.colorspace.name}", 'info')
+                                except Exception as conversion_e:
+                                    self.log(f"⚠️ Failed to convert CMYK image to RGB: {conversion_e} on page {page_num + 1}, img_index {img_index}", 'warning')
+                                    if old_pix is not None:
+                                        pix = old_pix # Revert
+                                        old_pix = None
+                                    if pix.n - pix.alpha == 4:
+                                        self.log(f"⚠️ Skipping image on page {page_num + 1}, img_index {img_index} due to CMYK conversion failure.", 'warning')
+                                        continue
                             
-                            if pix.n - pix.alpha < 4:  # GRAY or RGB
+                            # General conversion for other non-Gray/RGB formats
+                            if pix.colorspace.name not in [fitz.csGRAY.name, fitz.csRGB.name]:
+                                self.log(f"Attempting to convert image from {pix.colorspace.name} to RGB on page {page_num + 1}, img_index {img_index} (in convert_to_text)...", 'info')
+                                try:
+                                    old_pix = pix # Keep a reference
+                                    pix = fitz.Pixmap(fitz.csRGB, old_pix)
+                                    old_pix = None # Dereference
+                                    self.log(f"Successfully converted image to RGB. New colorspace: {pix.colorspace.name}, n: {pix.n}, alpha: {pix.alpha}", 'info')
+                                except Exception as conversion_e:
+                                    self.log(f"⚠️ Failed to convert image from {pix.colorspace.name} to RGB: {conversion_e} on page {page_num + 1}, img_index {img_index}", 'warning')
+                                    if old_pix is not None:
+                                        pix = old_pix # Revert
+                                        old_pix = None
+
+                            if pix.colorspace.name in [fitz.csGRAY.name, fitz.csRGB.name]:
                                 img_data = pix.tobytes("png")
                                 img = Image.open(io.BytesIO(img_data))
                                 
@@ -574,8 +605,13 @@ class PDFProcessor:
                                     ocr_text = pytesseract.image_to_string(img)
                                     if ocr_text.strip():
                                         image_texts.append(f"[Image {img_index + 1} Text]: {ocr_text.strip()}")
+                            else:
+                                self.log(f"⚠️ Skipped image with unconvertible colorspace: {pix.colorspace.name} on page {page_num + 1}, img_index {img_index} (in convert_to_text)", 'warning')
                             
+                            # Ensure pix is dereferenced
                             pix = None
+                            if 'old_pix' in locals() and old_pix is not None: # Ensure old_pix is also cleared
+                                old_pix = None
                             
                         except Exception as e:
                             self.log(f"⚠️ Error processing image {img_index + 1} on page {page_num + 1}: {e}", 'warning')
@@ -674,13 +710,42 @@ class PDFProcessor:
                     try:
                         xref = img[0]
                         pix = fitz.Pixmap(pdf_doc, xref)
-                        
+                        old_pix = None # Initialize old_pix
+
                         # Convert CMYK to RGB if necessary
                         if pix.n - pix.alpha == 4:  # CMYK
-                            pix = fitz.Pixmap(fitz.csRGB, pix)
-                        
+                            self.log(f"Image is CMYK on page {page_num + 1}, img_index {img_index}. Attempting to convert to RGB...", 'info')
+                            try:
+                                old_pix = pix # Keep a reference
+                                pix = fitz.Pixmap(fitz.csRGB, old_pix)
+                                old_pix = None # Dereference old_pix
+                                self.log(f"Successfully converted CMYK image to RGB. New colorspace: {pix.colorspace.name}", 'info')
+                            except Exception as conversion_e:
+                                self.log(f"⚠️ Failed to convert CMYK image to RGB: {conversion_e} on page {page_num + 1}, img_index {img_index}", 'warning')
+                                if old_pix is not None: # Check if old_pix was assigned
+                                    pix = old_pix # Revert to original pixmap if conversion failed
+                                    old_pix = None
+                                # Continue to next image if CMYK conversion failed and pix is still CMYK
+                                if pix.n - pix.alpha == 4: 
+                                    self.log(f"⚠️ Skipping image on page {page_num + 1}, img_index {img_index} due to CMYK conversion failure.", 'warning')
+                                    continue
+
+                        # General conversion for other non-Gray/RGB formats
+                        if pix.colorspace.name not in [fitz.csGRAY.name, fitz.csRGB.name]:
+                            self.log(f"Attempting to convert image from {pix.colorspace.name} to RGB on page {page_num + 1}, img_index {img_index}...", 'info')
+                            try:
+                                old_pix = pix # Keep a reference
+                                pix = fitz.Pixmap(fitz.csRGB, old_pix)
+                                old_pix = None # Dereference
+                                self.log(f"Successfully converted image to RGB. New colorspace: {pix.colorspace.name}, n: {pix.n}, alpha: {pix.alpha}", 'info')
+                            except Exception as conversion_e:
+                                self.log(f"⚠️ Failed to convert image from {pix.colorspace.name} to RGB: {conversion_e} on page {page_num + 1}, img_index {img_index}", 'warning')
+                                if old_pix is not None: # Check if old_pix was assigned
+                                    pix = old_pix # Revert to original pixmap
+                                    old_pix = None
+
                         # Only process grayscale or RGB images
-                        if pix.n - pix.alpha < 4:  # GRAY or RGB
+                        if pix.colorspace.name in [fitz.csGRAY.name, fitz.csRGB.name]:
                             img_data = pix.tobytes("png")
                             
                             if self.extract_images.get():
@@ -702,14 +767,16 @@ class PDFProcessor:
                                 else:
                                     self.log(f"⚠️ No text found in image {img_index + 1} on page {page_num + 1}", 'warning')
                         else:
-                            self.log(f"⚠️ Skipped unsupported image format on page {page_num + 1}", 'warning')
+                            self.log(f"⚠️ Skipped image with unconvertible colorspace: {pix.colorspace.name} on page {page_num + 1}, img_index {img_index}", 'warning')
                     
                     except Exception as e:
                         self.log(f"❌ Error processing image {img_index + 1} on page {page_num + 1}: {e}", 'error')
                     
                     finally:
-                        if 'pix' in locals():
-                            pix = None
+                        # Ensure pix is dereferenced
+                        pix = None
+                        if 'old_pix' in locals() and old_pix is not None: # Ensure old_pix is also cleared
+                            old_pix = None
                     
                     processed_images += 1
                     if total_images > 0:
