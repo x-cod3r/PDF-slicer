@@ -9,6 +9,7 @@ import io
 from pathlib import Path
 import threading
 import time
+import webbrowser
 
 class ModernStyle:
     def __init__(self, root):
@@ -48,7 +49,7 @@ class PDFProcessor:
     def __init__(self, root):
         self.root = root
         self.root.title("PDF Processor Pro - Slice, Convert & OCR")
-        self.root.geometry("800x700")
+        self.root.geometry("700x600")
         self.root.configure(bg='#FAFAFA')
         
         # Initialize modern style
@@ -124,6 +125,21 @@ class PDFProcessor:
         # Status label with modern styling
         self.status_label = ttk.Label(progress_frame, text="Ready to process", style='Body.TLabel')
         self.status_label.pack()
+
+        # Attribution Label
+        attribution_label = tk.Label(
+            main_container, 
+            text="Made by AboulNasr", 
+            font=('Segoe UI', 8), 
+            fg=self.style.colors['text_secondary'], 
+            cursor="hand2", 
+            bg=self.style.colors['background']  # Match main_container background
+        )
+        attribution_label.pack(side=tk.RIGHT, padx=5, pady=(5,0))
+        
+        def open_attribution_link(event):
+            webbrowser.open_new_tab("https://www.instagram.com/mahmoud.aboulnasr/")
+        attribution_label.bind("<Button-1>", open_attribution_link)
         
     def setup_input_tab(self):
         input_frame = ttk.Frame(self.notebook)
