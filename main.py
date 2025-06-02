@@ -48,7 +48,7 @@ class PDFProcessor:
     def __init__(self, root):
         self.root = root
         self.root.title("PDF Processor Pro - Slice, Convert & OCR")
-        self.root.geometry("900x800")
+        self.root.geometry("800x700")
         self.root.configure(bg='#FAFAFA')
         
         # Initialize modern style
@@ -221,7 +221,8 @@ class PDFProcessor:
         operations = [
             ("slice_pages", "📄 Slice by Page Range", "Extract specific pages from PDF"),
             ("slice_size", "💾 Slice by File Size", "Split PDF into size-limited parts"),
-            ("to_text", "📝 Convert to Text", "Extract all text with OCR support"),
+            ("simple_text_extraction", "📄 Simple Text Extraction (Fast, No OCR)", "Extracts text using basic methods, no OCR. Good for PDFs with selectable text."),
+            ("to_text", "📝 Convert to Text (Advanced, OCR)", "Extract text using advanced methods with OCR support"),
             ("extract_ocr", "🖼️ Extract Images & OCR", "Extract images and perform OCR")
         ]
         
@@ -290,23 +291,60 @@ class PDFProcessor:
         options_section = ttk.LabelFrame(scrollable_frame, text="🔧 Processing Options", padding=20)
         options_section.pack(fill=tk.X, pady=(0, 20)) # Added pady for consistency
         
-        ocr_check = tk.Checkbutton(
+        self.ocr_check_widget = tk.Checkbutton(
             options_section, text="🔍 Enable OCR for text extraction from images", 
             variable=self.enable_ocr, font=('Segoe UI', 10),
             bg='white', fg=self.style.colors['text'], selectcolor=self.style.colors['success'], activebackground='white'
         )
-        ocr_check.pack(anchor=tk.W, pady=(0, 10))
+        self.ocr_check_widget.pack(anchor=tk.W, pady=(0, 10))
         
-        extract_check = tk.Checkbutton(
+        self.extract_check_widget = tk.Checkbutton(
             options_section, text="🖼️ Extract and save images separately", 
             variable=self.extract_images, font=('Segoe UI', 10),
             bg='white', fg=self.style.colors['text'], selectcolor=self.style.colors['success'], activebackground='white'
         )
-        extract_check.pack(anchor=tk.W)
+        self.extract_check_widget.pack(anchor=tk.W)
+
+        # Add trace for operation changes
+        self.operation.trace_add("write", self.update_options_sensitivity)
+        # Initial call to set sensitivity
+        self.update_options_sensitivity()
         
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
+
+    def update_options_sensitivity(self, *args):
+        current_op = self.operation.get()
         
+        # Determine states for OCR and Extract Images checkboxes
+        # Relevant for 'to_text' (advanced) and 'extract_ocr'
+        # Not relevant for 'simple_text_extraction', 'slice_pages', 'slice_size'
+        
+        if current_op == "simple_text_extraction":
+            self.ocr_check_widget.config(state=tk.DISABLED)
+            self.extract_check_widget.config(state=tk.DISABLED)
+            # Optionally, uncheck them if disabled
+            # self.enable_ocr.set(False)
+            # self.extract_images.set(False)
+        elif current_op in ["slice_pages", "slice_size"]:
+            # OCR and Image Extraction are generally not primary for slicing,
+            # but let's assume they might be used by some internal logic if ever extended.
+            # For now, disable if not directly used or clarify requirements.
+            # Based on current implementation, they are not used for slicing.
+            self.ocr_check_widget.config(state=tk.DISABLED)
+            self.extract_check_widget.config(state=tk.DISABLED)
+        elif current_op == "to_text": # This is "Convert to Text (Advanced, OCR)"
+            self.ocr_check_widget.config(state=tk.NORMAL)
+            # Extract images might or might not be relevant depending on if it's used for OCR source
+            # The current `convert_to_text` uses `self.extract_images.get()` for image-based OCR
+            self.extract_check_widget.config(state=tk.NORMAL) 
+        elif current_op == "extract_ocr":
+            self.ocr_check_widget.config(state=tk.NORMAL)
+            self.extract_check_widget.config(state=tk.NORMAL)
+        else: # Default or unknown case
+            self.ocr_check_widget.config(state=tk.NORMAL)
+            self.extract_check_widget.config(state=tk.NORMAL)
+
     def setup_output_tab(self):
         output_frame = ttk.Frame(self.notebook)
         self.notebook.add(output_frame, text="📊 Output Log")
@@ -424,6 +462,8 @@ class PDFProcessor:
                 self.convert_to_text()
             elif operation == "extract_ocr":
                 self.extract_and_ocr()
+            elif operation == "simple_text_extraction":
+                self.simple_convert_to_text()
             
             if not self.stop_processing:
                 self.update_status("✅ Processing completed!", 100)
@@ -440,6 +480,56 @@ class PDFProcessor:
             self.is_processing = False
             self.process_btn.config(state=tk.NORMAL)
             self.stop_btn.config(state=tk.DISABLED)
+
+    def simple_convert_to_text(self):
+        if self.stop_processing:
+            return
+            
+        self.update_status("📝 Performing simple text extraction...", 10)
+        self.log("📄 Starting simple text extraction (PyPDF2)...", 'info')
+        text_content = []
+        
+        try:
+            with open(self.pdf_path.get(), 'rb') as file:
+                reader = PyPDF2.PdfReader(file)
+                total_pages = len(reader.pages)
+                
+                if total_pages == 0:
+                    self.log("⚠️ The PDF has no pages.", 'warning')
+                    self.update_status("⚠️ No pages in PDF", 0)
+                    return
+
+                for i, page in enumerate(reader.pages):
+                    if self.stop_processing:
+                        return
+                        
+                    self.update_status(f"Processing page {i + 1}/{total_pages}...", 10 + (i/total_pages)*80)
+                    try:
+                        text = page.extract_text()
+                        if text is None: # PyPDF2 can return None if no text found
+                            text = ""
+                        text_content.append(f"--- Page {i + 1} ---\n{text}\n")
+                        self.log(f"✅ Extracted text from page {i + 1} (PyPDF2)", 'info')
+                    except Exception as e:
+                        self.log(f"⚠️ Error extracting text from page {i + 1} with PyPDF2: {e}", 'warning')
+                        text_content.append(f"--- Page {i + 1} ---\n[Error extracting text: {e}]\n")
+
+        except Exception as e:
+            self.log(f"❌ Error opening or reading PDF with PyPDF2: {e}", 'error')
+            self.update_status("❌ Error with PDF", 0)
+            return
+        
+        if not self.stop_processing:
+            output_filename = f"{Path(self.pdf_path.get()).stem}_simple_text.txt"
+            output_path = os.path.join(self.output_dir.get(), output_filename)
+            
+            try:
+                with open(output_path, 'w', encoding='utf-8') as text_file:
+                    text_file.write('\n'.join(text_content))
+                self.log(f"✅ Simple text saved to: {output_path}", 'success')
+            except Exception as e:
+                self.log(f"❌ Error saving simple text file: {e}", 'error')
+                self.update_status("❌ Error saving file", 0)
     
     def slice_by_pages(self):
         if self.stop_processing:
@@ -682,6 +772,13 @@ class PDFProcessor:
         total_images = 0
         
         # Count total images first for progress tracking
+        # Ensure pdf_doc is valid and has pages before proceeding
+        if not pdf_doc or total_pages == 0:
+            self.log("⚠️ PDF document is empty or invalid for image processing.", 'warning')
+            if pdf_doc: # Close if it was opened
+                pdf_doc.close()
+            return
+
         for page_num in range(total_pages):
             page = pdf_doc[page_num]
             image_list = page.get_images()
